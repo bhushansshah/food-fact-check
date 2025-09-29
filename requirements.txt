@@ -1,4 +1,4 @@
 pandas
 datasets
 tqdm
-nltk
+matplotlib
