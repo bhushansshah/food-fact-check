@@ -6,17 +6,23 @@ def extract_tags(dataset_path, output_json_path):
     # Load dataset
     dataset = load_from_disk(dataset_path)
 
-    ingredients_set = set()
+    ingredients_dict = {}
     additives_set = set()
     minerals_set = set()
     nutriments_set = set()
     counter = 0
     for example in dataset:
         # --- Ingredients ---
+        # for ing in example.get("ingredients_text", []) or []:
+        #     lang = ing.split(":")[0]
+        #     if lang == "en":  # only keep English ingredients
+        #         ingredients_set.add(ing)
         for ing in example.get("ingredients_tags", []) or []:
-            lang = ing.split(":")[0]
-            if lang == "en":  # only keep English ingredients
-                ingredients_set.add(ing)
+            if ing.startswith("en:"):
+                if ingredients_dict.get(ing) is None:
+                    ingredients_dict[ing] = 1
+                else:
+                    ingredients_dict[ing] += 1
 
         # --- Additives ---
         for add in example.get("additives_tags", []) or []:
@@ -39,12 +45,18 @@ def extract_tags(dataset_path, output_json_path):
         if counter % 1000 == 0:
             print(f"Processed {counter} examples...")
 
-    # Add additives + minerals to ingredients if not already there
-    ingredients_set.update(additives_set)
-    ingredients_set.update(minerals_set)
+    #Add additives and minerals to ingredients_dict
+    for add in additives_set:
+        if ingredients_dict.get(add) is None:
+            ingredients_dict[add] = 1
 
+    for min_ in minerals_set:
+        if ingredients_dict.get(min_) is None:
+            ingredients_dict[min_] = 1
+
+    print("The length of ingredients - ", len(ingredients_dict))
     result = {
-        "ingredients": sorted(ingredients_set),
+        "ingredients": ingredients_dict,
         "additives": sorted(additives_set),
         "minerals": sorted(minerals_set),
         "nutriments": sorted(nutriments_set),
