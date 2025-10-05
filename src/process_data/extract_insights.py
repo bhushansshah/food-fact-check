@@ -11,10 +11,13 @@ load_dotenv()
 LLM_INSIGHTS_PATH = "/Users/bhushanshah/Documents/food-fact-check/data/llm_insights"
 
 api_keys = [
-    os.getenv("GOOGLE_GEMINI_API_KEY_1"),
-    os.getenv("GOOGLE_GEMINI_API_KEY_2"),
-    os.getenv("GOOGLE_GEMINI_API_KEY_3"),
-    os.getenv("GOOGLE_GEMINI_API_KEY_4"),
+    # os.getenv("GOOGLE_GEMINI_API_KEY_1"),
+    # os.getenv("GOOGLE_GEMINI_API_KEY_2"),
+    # os.getenv("GOOGLE_GEMINI_API_KEY_3"),
+    # os.getenv("GOOGLE_GEMINI_API_KEY_4"),
+    os.getenv("GOOGLE_GEMINI_API_KEY_5"),
+    os.getenv("GOOGLE_GEMINI_API_KEY_6"),
+
 ]
 
 def load_constituents(constituents_path):
@@ -65,7 +68,7 @@ def get_mineral_insights(connector, constituents, insights, model="gemini-2.5-fl
 
         i += 1
         parse_num_retry = 0  # reset retry counter for next mineral
-        time.sleep(1)  # brief pause to avoid hitting rate limits
+        time.sleep(2.5)  # brief pause to avoid hitting rate limits
     insights["minerals"] = mineral_insights
     return insights
 
@@ -106,6 +109,51 @@ def get_additives_insights(connector, constituents, insights, model="gemini-2.5-
     insights["additives"] = additive_insights
     return insights
 
+def get_ingredient_insights(connector, constituents, insights, model="gemini-2.5-flash-lite", insights_path=None):
+    ingredients = constituents.get("ingredients", [])
+    if "ingredients" not in insights:
+        insights["ingredients"] = {}
+    ingredient_insights = insights.get("ingredients", {})
+    i = 0
+    parse_num_retry = 0
+    max_parse_retries = 2
+    no_of_ingredients = len(ingredients)
+    count = len(ingredient_insights) # No of ingredients we already have insights for.
+    print(f"Total ingredients: {no_of_ingredients}, Already have insights for: {count}, Remaining: {no_of_ingredients - count}")
+    while i < len(ingredients):
+        ingredient = ingredients[i]
+        if ingredient not in ingredient_insights:
+            print(f"Fetching insights for: {ingredient}")
+            prompt = INGREDIENT_PROMPT.format(ingredient_name=ingredient)
+            try:
+                response_text = connector.generate_content(model=model, prompt=prompt)
+                structured = extract_json_from_markdown(response_text)
+            except Exception as e:
+                print(f"Error fetching insights for {ingredient}: {e}")
+                structured = None
+
+            if structured is None:
+                if parse_num_retry < max_parse_retries:
+                    parse_num_retry += 1
+                    print(f"Failed to parse response for {ingredient}, retrying... ({parse_num_retry}/{max_parse_retries})")
+                    continue
+                else:
+                    print(f"Failed to parse response for {ingredient} after {max_parse_retries} retries, skipping.")
+            else:
+                ingredient_insights[ingredient] = structured
+                count += 1
+                if count % 50 == 0:
+                    print(f"Fetched insights for {count} ingredients so far.")
+                    if insights_path:
+                        save_insights(insights_path, insights)  # Save progress
+                        print(f"Progress saved to {insights_path}")
+
+        i += 1
+        parse_num_retry = 0  # reset retry counter for next ingredient
+        time.sleep(1)  # brief pause to avoid hitting rate limits
+    insights["ingredients"] = ingredient_insights
+    return insights
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--constituents_path", type=str, required=True, help="Path to constituents.json")
@@ -125,6 +173,9 @@ if __name__ == "__main__":
 
     elif args.type_of_constituent == "additives":
         insights = get_additives_insights(connector, constituents, insights)
+
+    elif args.type_of_constituent == "ingredients":
+        insights = get_ingredient_insights(connector, constituents, insights, insights_path=insights_path)
 
     save_insights(insights_path, insights)
     print("Insights updated and saved ✅")
