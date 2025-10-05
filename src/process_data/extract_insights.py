@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import os
 import json
 import argparse
-from .prompts import MINERAL_PROMPT
+from .prompts import MINERAL_PROMPT, ADDITIVE_PROMPT, INGREDIENT_PROMPT
 from .llm_connectors import GeminiConnector  # assuming you put GeminiConnector in this file
 import time 
 from utils.utils import extract_json_from_markdown
@@ -21,15 +21,15 @@ def load_constituents(constituents_path):
     with open(constituents_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def load_gemini_insights(gemini_insights_path):
-    if os.path.exists(gemini_insights_path):
-        with open(gemini_insights_path, "r", encoding="utf-8") as f:
+def load_insights(insights_path):
+    if os.path.exists(insights_path):
+        with open(insights_path, "r", encoding="utf-8") as f:
             return json.load(f)
     else:
         return {}
 
-def save_gemini_insights(gemini_insights_path, insights):
-    with open(gemini_insights_path, "w", encoding="utf-8") as f:
+def save_insights(insights_path, insights):
+    with open(insights_path, "w", encoding="utf-8") as f:
         json.dump(insights, f, indent=2, ensure_ascii=False)
 
 def get_mineral_insights(connector, constituents, insights, model="gemini-2.5-flash-lite"):
@@ -69,11 +69,48 @@ def get_mineral_insights(connector, constituents, insights, model="gemini-2.5-fl
     insights["minerals"] = mineral_insights
     return insights
 
+def get_additives_insights(connector, constituents, insights, model="gemini-2.5-flash-lite"):
+    additives = constituents.get("additives", [])
+    if "additives" not in insights:
+        insights["additives"] = {}
+    additive_insights = insights.get("additives", {})
+    i = 0
+    parse_num_retry = 0
+    max_parse_retries = 2
+    no_of_additives = len(additives)
+    count = len(additive_insights) # No of additives we already have insights for.
+    print(f"Total additives: {no_of_additives}, Already have insights for: {count}, Remaining: {no_of_additives - count}")
+    while i < len(additives):
+        additive = additives[i]
+        if additive not in additive_insights:
+            print(f"Fetching insights for: {additive}")
+            prompt = ADDITIVE_PROMPT.format(additive_name=additive)
+            response_text = connector.generate_content(model=model, prompt=prompt)
+            structured = extract_json_from_markdown(response_text)
+            if structured is None:
+                if parse_num_retry < max_parse_retries:
+                    parse_num_retry += 1
+                    print(f"Failed to parse response for {additive}, retrying... ({parse_num_retry}/{max_parse_retries})")
+                    continue
+                else:
+                    print(f"Failed to parse response for {additive} after {max_parse_retries} retries, skipping.")
+            else:
+                additive_insights[additive] = structured
+                count += 1
+                if count % 50 == 0:
+                    print(f"Fetched insights for {count} additives so far.")
+
+        i += 1
+        parse_num_retry = 0  # reset retry counter for next additive
+        time.sleep(1)  # brief pause to avoid hitting rate limits
+    insights["additives"] = additive_insights
+    return insights
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--constituents_path", type=str, required=True, help="Path to constituents.json")
     parser.add_argument("--model", type=str, required=True, help="Model to use for insights")
-    parser.add_argument("--type_of_constituent", type=str, required=True, choices=["minerals"], help="Type of constituent to process('minerals', 'additives', 'ingredients')")
+    parser.add_argument("--type_of_constituent", type=str, required=True, choices=["minerals", "additives", "ingredients"], help="Type of constituent to process('minerals', 'additives', 'ingredients')")
     args = parser.parse_args()
 
     constituents = load_constituents(args.constituents_path)
@@ -81,13 +118,15 @@ if __name__ == "__main__":
         insights_path = os.path.join(LLM_INSIGHTS_PATH, "gemini", "gemini_insights.json")
         connector = GeminiConnector(api_keys=api_keys)
 
-    insights = load_gemini_insights(insights_path)
+    insights = load_insights(insights_path)
 
     if args.type_of_constituent == "minerals":
         insights = get_mineral_insights(connector, constituents, insights)
 
+    elif args.type_of_constituent == "additives":
+        insights = get_additives_insights(connector, constituents, insights)
 
-    save_gemini_insights(insights_path, insights)
+    save_insights(insights_path, insights)
     print("Insights updated and saved ✅")
 
 
