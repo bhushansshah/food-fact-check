@@ -2,3 +2,6 @@ pandas
 datasets
 tqdm
 matplotlib
+google-genai
+dotenv
+markdown-it-py
