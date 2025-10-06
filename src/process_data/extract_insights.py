@@ -11,10 +11,10 @@ load_dotenv()
 LLM_INSIGHTS_PATH = "/Users/bhushanshah/Documents/food-fact-check/data/llm_insights"
 
 api_keys = [
-    # os.getenv("GOOGLE_GEMINI_API_KEY_1"),
-    # os.getenv("GOOGLE_GEMINI_API_KEY_2"),
-    # os.getenv("GOOGLE_GEMINI_API_KEY_3"),
-    # os.getenv("GOOGLE_GEMINI_API_KEY_4"),
+    os.getenv("GOOGLE_GEMINI_API_KEY_1"),
+    os.getenv("GOOGLE_GEMINI_API_KEY_2"),
+    os.getenv("GOOGLE_GEMINI_API_KEY_3"),
+    os.getenv("GOOGLE_GEMINI_API_KEY_4"),
     os.getenv("GOOGLE_GEMINI_API_KEY_5"),
     os.getenv("GOOGLE_GEMINI_API_KEY_6"),
 
@@ -147,6 +147,11 @@ def get_ingredient_insights(connector, constituents, insights, model="gemini-2.5
                     if insights_path:
                         save_insights(insights_path, insights)  # Save progress
                         print(f"Progress saved to {insights_path}")
+        
+        else:
+            print(f"Already have insights for: {ingredient}, skipping.")
+            i += 1
+            continue
 
         i += 1
         parse_num_retry = 0  # reset retry counter for next ingredient
